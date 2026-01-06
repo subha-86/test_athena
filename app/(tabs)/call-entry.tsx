@@ -4,27 +4,41 @@ import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    ImageBackground,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  ImageBackground,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const bgImage = require("../../assets/images/bg.png");
 
+/* ================= DISTANCE UTILITY ================= */
+const getDistanceInKm = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
 export default function CallEntryAddScreen() {
   const router = useRouter();
-
-  /* ================= LOCATION ================= */
-  const [locationText, setLocationText] = useState("Fetching location...");
-  const [tempLocation, setTempLocation] = useState("");
-  const [showLocationModal, setShowLocationModal] = useState(false);
 
   /* ================= MANDATORY ================= */
   const [visitDate, setVisitDate] = useState<Date | null>(null);
@@ -33,116 +47,155 @@ export default function CallEntryAddScreen() {
   const [customer, setCustomer] = useState("");
   const [salesType, setSalesType] = useState("");
 
-  /* ================= OTHER ================= */
-  const [address, setAddress] = useState("");
-  const [area, setArea] = useState("");
-  const [termOfSale, setTermOfSale] = useState("");
-  const [nature, setNature] = useState("HOT");
-  const [callStatus, setCallStatus] = useState("MATERIALISED");
-  const [transport, setTransport] = useState("SEA");
-  const [serviceType, setServiceType] = useState("EXPORT");
-  const [division, setDivision] = useState<string[]>([]);
+  /* ================= CURRENT GPS ================= */
+  const [currentLatLng, setCurrentLatLng] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
-  /* ================= GPS ================= */
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-
-      const pos = await Location.getCurrentPositionAsync({});
-      const addr = await Location.reverseGeocodeAsync(pos.coords);
-      if (addr.length > 0) {
-        const a = addr[0];
-        setLocationText(`${a.subregion || a.city}, ${a.region}`);
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Location permission is required");
+        return;
       }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      setCurrentLatLng({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
     })();
   }, []);
 
-  const saveManualLocation = async () => {
-    if (!tempLocation) return;
-    setLocationText(tempLocation);
-    setShowLocationModal(false);
+  /* ================= DETAILS ================= */
+  const [details, setDetails] = useState([
+    {
+      address: "",
+      area: "",
+      termOfSale: "",
+      nature: "HOT",
+      callStatus: "MATERIALISED",
+      transport: "SEA",
+      serviceType: "EXPORT",
+      latitude: null as number | null,
+      longitude: null as number | null,
+    },
+  ]);
+
+  const addDetailCard = () => {
+    setDetails((prev) => [
+      ...prev,
+      {
+        address: "",
+        area: "",
+        termOfSale: "",
+        nature: "HOT",
+        callStatus: "MATERIALISED",
+        transport: "SEA",
+        serviceType: "EXPORT",
+        latitude: null,
+        longitude: null,
+      },
+    ]);
   };
 
-  const toggleDivision = (d: string) => {
-    setDivision((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
-    );
-  };
-
+  /* ================= SAVE ================= */
   const submit = () => {
     if (!visitDate || !contactPerson || !customer || !salesType) {
-      Alert.alert("Missing Fields", "Please fill all mandatory fields");
+      Alert.alert("Missing Fields", "Fill all mandatory fields");
       return;
     }
-    Alert.alert("Success", "Call Entry Saved");
+
+    if (!currentLatLng) {
+      Alert.alert("Location Error", "Unable to fetch current location");
+      return;
+    }
+
+    for (let i = 0; i < details.length; i++) {
+      const d = details[i];
+
+      if (d.address) {
+        if (!d.latitude || !d.longitude) {
+          Alert.alert(
+            "Location Missing",
+            `Capture location for Call Detail ${i + 1}`
+          );
+          return;
+        }
+
+        const distance = getDistanceInKm(
+          currentLatLng.latitude,
+          currentLatLng.longitude,
+          d.latitude,
+          d.longitude
+        );
+
+        if (distance > 1) {
+          Alert.alert(
+            "Location Validation Failed",
+            `Call Detail ${i + 1} is ${distance.toFixed(
+              2
+            )} KM away.\nAllowed distance is 1 KM`
+          );
+          return;
+        }
+      }
+    }
+
+    Alert.alert("Success", "Call Entry Saved Successfully");
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
-      <ImageBackground source={bgImage} style={{ flex: 1 }} resizeMode="cover">
+    <SafeAreaView style={{ flex: 1 }}>
+      <ImageBackground source={bgImage} style={{ flex: 1 }}>
         <View style={styles.overlay} />
 
-        {/* ================= FIXED WHITE TOP ================= */}
-        <View style={styles.topWhiteSection}>
-          {/* HEADER */}
-          <View style={styles.topHeader}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={22} />
-            </TouchableOpacity>
+        {/* ================= HEADER ================= */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Add Call Entry</Text>
+        </View>
 
-            <Text style={styles.headerTitle}>Add Call Entry</Text>
+        {/* ================= MANDATORY CARD ================= */}
+        <View style={styles.mandatoryCard}>
+          <TouchableOpacity
+            style={styles.visitDateRow}
+            onPress={() => setShowVisitPicker(true)}
+          >
+            <Ionicons name="calendar-outline" size={14} />
+            <Text>
+              {visitDate
+                ? visitDate.toISOString().split("T")[0]
+                : "Visit Date *"}
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.locationBox}
-              onPress={() => {
-                setTempLocation(locationText);
-                setShowLocationModal(true);
-              }}
-            >
-              <Ionicons name="location" size={14} />
-              <Text style={styles.locationText}>{locationText}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* MANDATORY CARD */}
-          <View style={styles.mandatoryCard}>
-            <Text style={styles.sectionTitle}>Mandatory Details</Text>
-
-            <TouchableOpacity
-              style={styles.visitDateRow}
-              onPress={() => setShowVisitPicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={16} />
-              <Text style={styles.visitDateText}>
-                {visitDate
-                  ? visitDate.toISOString().split("T")[0]
-                  : "Select Visit Date *"}
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.mandatoryGrid}>
-              <TextInput
-                placeholder="Contact Person *"
-                style={styles.mandatoryInput}
-                value={contactPerson}
-                onChangeText={setContactPerson}
-              />
-
-              <TextInput
-                placeholder="Customer *"
-                style={styles.mandatoryInput}
-                value={customer}
-                onChangeText={setCustomer}
-              />
-
-              <TextInput
-                placeholder="Sales Type *"
-                style={styles.mandatoryInputFull}
-                value={salesType}
-                onChangeText={setSalesType}
-              />
-            </View>
+          <View style={styles.grid}>
+            <TextInput
+              placeholder="Contact Person *"
+              style={styles.inputHalf}
+              value={contactPerson}
+              onChangeText={setContactPerson}
+            />
+            <TextInput
+              placeholder="Customer *"
+              style={styles.inputHalf}
+              value={customer}
+              onChangeText={setCustomer}
+            />
+            <TextInput
+              placeholder="Sales Type *"
+              style={styles.inputFull}
+              value={salesType}
+              onChangeText={setSalesType}
+            />
           </View>
         </View>
 
@@ -157,180 +210,159 @@ export default function CallEntryAddScreen() {
           />
         )}
 
-        {/* ================= SCROLLABLE CONTENT ================= */}
-        <ScrollView contentContainerStyle={styles.scrollArea}>
-          <Section title="Address">
-            <Input label="Address" value={address} onChange={setAddress} multiline />
-            <Input label="Area" value={area} onChange={setArea} />
-            <Input label="Term of Sale" value={termOfSale} onChange={setTermOfSale} multiline />
-          </Section>
+        {/* ================= DETAILS ================= */}
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          {details.map((item, index) => (
+            <View key={index} style={styles.card}>
+              <Text style={styles.cardTitle}>Call Detail {index + 1}</Text>
 
-          <Section title="Call Details">
-            <Radio label="Nature of Call" options={["HOT", "MEDIUM", "COLD"]} value={nature} onChange={setNature} />
-            <Radio label="Call Status" options={["MATERIALISED", "NOT MATERIALISED"]} value={callStatus} onChange={setCallStatus} />
-            <Radio label="Transportation Mode" options={["SEA", "AIR"]} value={transport} onChange={setTransport} />
-            <Radio label="Service Type" options={["EXPORT", "IMPORT"]} value={serviceType} onChange={setServiceType} />
-          </Section>
+              <TextInput
+                placeholder="Address"
+                style={styles.inputFull}
+                value={item.address}
+                onChangeText={(v) => {
+                  const copy = [...details];
+                  copy[index].address = v;
+                  setDetails(copy);
+                }}
+              />
 
-          <Section title="Division">
-            <View style={styles.divisionGrid}>
-              {["CHA", "CDL", "3PL", "PROJECT CARGO", "TPTR", "FFW", "LINES", "CONTAINER SALES"].map((d) => (
-                <TouchableOpacity key={d} style={styles.divisionItem} onPress={() => toggleDivision(d)}>
-                  <Ionicons name={division.includes(d) ? "checkbox" : "square-outline"} size={18} />
-                  <Text>{d}</Text>
-                </TouchableOpacity>
-              ))}
+              <TextInput
+                placeholder="Area"
+                style={styles.inputFull}
+                value={item.area}
+                onChangeText={(v) => {
+                  const copy = [...details];
+                  copy[index].area = v;
+                  setDetails(copy);
+                }}
+              />
+
+              <TouchableOpacity
+                style={styles.locationBtn}
+                onPress={async () => {
+                  const pos = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.High,
+                  });
+
+                  const copy = [...details];
+                  copy[index].latitude = pos.coords.latitude;
+                  copy[index].longitude = pos.coords.longitude;
+                  setDetails(copy);
+
+                  Alert.alert("Location Captured");
+                }}
+              >
+                <Ionicons name="location-outline" size={16} />
+                <Text>Capture Location</Text>
+              </TouchableOpacity>
+
+              {item.latitude && (
+                <Text style={styles.latLng}>
+                  Lat: {item.latitude.toFixed(5)} | Lng:{" "}
+                  {item.longitude?.toFixed(5)}
+                </Text>
+              )}
             </View>
-          </Section>
+          ))}
 
-          <TouchableOpacity style={styles.submitBtn} onPress={submit}>
-            <Text style={styles.submitText}>SAVE CALL ENTRY</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={addDetailCard}>
+            <Ionicons name="add-circle-outline" size={20} />
+            <Text>Add Another Detail</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.saveBtn} onPress={submit}>
+            <Text style={{ color: "#fff", fontWeight: "700" }}>
+              SAVE CALL ENTRY
+            </Text>
           </TouchableOpacity>
         </ScrollView>
-
-        {/* LOCATION MODAL */}
-        <Modal visible={showLocationModal} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.sectionTitle}>Change Location</Text>
-              <Input label="Location" value={tempLocation} onChange={setTempLocation} />
-              <TouchableOpacity style={styles.primaryBtn} onPress={saveManualLocation}>
-                <Text style={{ color: "#fff" }}>Save Location</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
       </ImageBackground>
     </SafeAreaView>
   );
 }
 
-/* ================= REUSABLE ================= */
-
-const Section = ({ title, children }: any) => (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    {children}
-  </View>
-);
-
-const Input = ({ label, value, onChange, multiline }: any) => (
-  <View style={{ marginBottom: 12 }}>
-    <Text style={styles.label}>{label}</Text>
-    <TextInput
-      style={[styles.input, multiline && { height: 80 }]}
-      value={value}
-      onChangeText={onChange}
-      multiline={multiline}
-    />
-  </View>
-);
-
-const Radio = ({ label, options, value, onChange }: any) => (
-  <View style={{ marginBottom: 12 }}>
-    <Text style={styles.label}>{label}</Text>
-    <View style={styles.row}>
-      {options.map((o: string) => (
-        <TouchableOpacity key={o} style={styles.radio} onPress={() => onChange(o)}>
-          <Ionicons name={value === o ? "radio-button-on" : "radio-button-off"} size={18} />
-          <Text>{o}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  </View>
-);
-
 /* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.3)" },
 
-  topWhiteSection: {
-    backgroundColor: "#fff",
-    paddingBottom: 12,
-  },
-
-  topHeader: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
+    backgroundColor: "#fff",
   },
 
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    flex: 1,
-    marginLeft: 10,
-  },
-
-  locationBox: { alignItems: "flex-end", maxWidth: 140 },
-  locationText: { fontSize: 11 },
+  headerTitle: { fontSize: 18, fontWeight: "700", marginLeft: 10 },
 
   mandatoryCard: {
-    marginHorizontal: 16,
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
+    margin: 12,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
 
-  visitDateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
+  visitDateRow: { flexDirection: "row", gap: 6, marginBottom: 10 },
 
-  visitDateText: { fontWeight: "600" },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
 
-  mandatoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-
-  mandatoryInput: {
+  inputHalf: {
     width: "48%",
     backgroundColor: "#F1F5F9",
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 8,
   },
 
-  mandatoryInputFull: {
+  inputFull: {
     width: "100%",
     backgroundColor: "#F1F5F9",
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 8,
+    marginBottom: 8,
   },
 
-  scrollArea: { padding: 16, paddingBottom: 60 },
-
-  section: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
 
-  sectionTitle: { fontWeight: "700", marginBottom: 12 },
+  cardTitle: { fontWeight: "700", marginBottom: 10 },
 
-  label: { fontSize: 12, fontWeight: "600", marginBottom: 4 },
-  input: { backgroundColor: "#fff", borderRadius: 10, padding: 6 },
+  locationBtn: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    padding: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 6,
+  },
 
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  radio: { flexDirection: "row", alignItems: "center", gap: 6 },
+  latLng: { fontSize: 12, color: "#555", marginTop: 4 },
 
-  divisionGrid: { flexDirection: "row", flexWrap: "wrap" },
-  divisionItem: { width: "33.33%", flexDirection: "row", alignItems: "center", gap: 6 },
+  addBtn: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    padding: 12,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    borderRadius: 12,
+    marginVertical: 10,
+  },
 
-  submitBtn: {
+  saveBtn: {
     backgroundColor: "#16A34A",
     padding: 16,
-    borderRadius: 24,
+    borderRadius: 20,
     alignItems: "center",
-    marginTop: 10,
   },
-
-  submitText: { color: "#fff", fontWeight: "700" },
-
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 20 },
-  modalCard: { backgroundColor: "#fff", borderRadius: 20, padding: 20 },
-  primaryBtn: { backgroundColor: "#2563EB", padding: 12, borderRadius: 20, alignItems: "center" },
 });
