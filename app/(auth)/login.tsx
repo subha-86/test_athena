@@ -3,15 +3,15 @@ import axios from "axios";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ImageBackground,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ImageBackground,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const bgImage = require("../../assets/images/bg.png");
@@ -71,6 +71,7 @@ export default function LoginScreen() {
           ["isloggedIn", "true"],
           ["userId", user.userId],
           ["username", user.username],
+          ["crmUserId", empId.toUpperCase()], 
           ["email", user.email],
           ["designationName", user.designationName ?? ""],
           ["departmentName", user.departmentName ?? ""],

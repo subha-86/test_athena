@@ -136,6 +136,18 @@ export default function DashboardScreen() {
               label="Sea Tariff"
               onPress={() => router.push("/(tabs)/sea-tariff")}
             />
+            <SquareButton
+  icon={
+    <MaterialCommunityIcons
+      name="truck-fast-outline"
+      size={28}
+      color="#0EA5E9"
+    />
+  }
+  label="Track Shipment"
+  onPress={() => router.push("/(tabs)/TrackShipmentScreen")}
+/>
+
           </View>
         </ScrollView>
       </ImageBackground>
