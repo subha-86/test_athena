@@ -1,10 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   ImageBackground,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -12,9 +13,77 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AIApi from "../hooks/aiApi";
 import erpApi from "../hooks/erpApi";
 
+
+// 🔔 Notifications
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import * as SecureStore from "expo-secure-store";
+
 const bgImage = require("../../assets/images/bg.png");
+
+/* ================= NOTIFICATION HELPERS ================= */
+
+const SECURE_KEYS = {
+  devicePushToken: "pushToken.device",
+};
+
+async function buildDeviceName() {
+  try {
+    const brand = Device.brand ?? "";
+    const model = Device.modelName ?? "";
+    const os = `${Platform.OS} ${Device.osVersion ?? ""}`.trim();
+    return [brand, model, os].filter(Boolean).join(" ") || "Unknown Device";
+  } catch {
+    return "Unknown Device";
+  }
+}
+
+async function getDevicePushTokenOrFetch(): Promise<string | null> {
+  const stored = await SecureStore.getItemAsync(SECURE_KEYS.devicePushToken);
+  if (stored) return stored;
+
+  try {
+    const res = await Notifications.getDevicePushTokenAsync();
+    const token = (res as any)?.data ?? null;
+
+    if (token) {
+      await SecureStore.setItemAsync(SECURE_KEYS.devicePushToken, token);
+    }
+    return token;
+  } catch (e) {
+    console.warn("❌ Failed to get device push token", e);
+    return null;
+  }
+}
+
+function getDeviceType() {
+  if (Platform.OS === "android") return "android";
+  if (Platform.OS === "ios") return "ios";
+  return "unknown";
+}
+
+async function registerNotificationToken() {
+  try {
+    const device_token = await getDevicePushTokenOrFetch();
+    if (!device_token) return;
+
+    const payload = {
+      device_name: await buildDeviceName(),
+      device_token,
+      device_type: getDeviceType(),
+    };
+
+    await AIApi.post("/notifications/register-token", payload);
+    console.log("✅ Notification token registered");
+  } catch (e) {
+    console.warn("❌ Failed to register notification token", e);
+  }
+}
+
+/* ================= LOGIN SCREEN ================= */
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -23,6 +92,20 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // 🔔 Request notification permission once
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== "granted") {
+          console.log("🔕 Notification permission not granted");
+        }
+      } catch (e) {
+        console.warn("Notification permission error", e);
+      }
+    })();
+  }, []);
 
   const handleLogin = async () => {
     if (!empId || !password) {
@@ -40,37 +123,37 @@ export default function LoginScreen() {
       const response = await erpApi.post(
         "/Athena/feeder/mobileApp/mobilelogin",
         {
-          username: empId.toUpperCase(), // SAME as Angular
+          username: empId.toUpperCase(),
           password: password,
         },
         {
           headers: {
-            "X-Requested-With": "XMLHttpRequest", // important
+            "X-Requested-With": "XMLHttpRequest",
           },
           timeout: 15000,
         }
       );
 
       console.log("LOGIN RESPONSE:", response.data);
-
       const result = response.data;
 
-      // ✅ EXACT SAME CHECK AS ANGULAR
+      // ✅ SAME SUCCESS CHECK AS ANGULAR
       if (result && result.success === true) {
         const user = result.userDetail;
 
-        // === STORE SAME DATA AS WEB ===
         await AsyncStorage.multiSet([
           ["isloggedIn", "true"],
           ["userId", user.userId],
           ["username", user.username],
-          ["crmUserId", empId.toUpperCase()], 
+          ["crmUserId", empId.toUpperCase()],
           ["email", user.email],
           ["designationName", user.designationName ?? ""],
           ["departmentName", user.departmentName ?? ""],
         ]);
 
-        // ✅ NAVIGATE TO DASHBOARD
+        // 🔔 SAVE NOTIFICATION TOKEN AFTER LOGIN
+        await registerNotificationToken();
+
         router.replace("/(tabs)");
       } else {
         Alert.alert(
@@ -141,7 +224,6 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          {/* FORGOT PASSWORD */}
           <TouchableOpacity>
             <Text style={styles.forgot}>Forgot password?</Text>
           </TouchableOpacity>
@@ -154,28 +236,14 @@ export default function LoginScreen() {
 /* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#0b0b0bff",
-  },
-
-  bg: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-  },
-
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "transparent",
-  },
+  safe: { flex: 1, backgroundColor: "#0b0b0bff" },
+  bg: { flex: 1, justifyContent: "center", paddingHorizontal: 20 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "transparent" },
 
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 22,
-
-    // subtle elevation
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -217,17 +285,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 14,
-  },
+  passwordInput: { flex: 1, paddingVertical: 14, fontSize: 14 },
 
-  showText: {
-    color: "#1D4ED8",
-    fontWeight: "600",
-    fontSize: 13,
-  },
+  showText: { color: "#1D4ED8", fontWeight: "600", fontSize: 13 },
 
   button: {
     backgroundColor: "#0F172A",
@@ -236,11 +296,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 15,
-  },
+  buttonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
 
   forgot: {
     marginTop: 16,
