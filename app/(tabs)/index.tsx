@@ -115,8 +115,8 @@ export default function DashboardScreen() {
 
             <SquareButton
               icon={<Ionicons name="call-outline" size={28} color="#7C3AED" />}
-              label="Call Entry"
-              onPress={() => router.push("/(tabs)/call-entry")}
+              label="Calendar"
+              onPress={() => router.push("/(tabs)/calendar")}
             />
 
             <SquareButton

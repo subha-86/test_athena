@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import AIApi from "../hooks/aiApi";
+import aiApi from "../hooks/aiApi";
 import erpApi from "../hooks/erpApi";
 
 // 🔔 Notifications
@@ -83,7 +83,7 @@ async function registerNotificationToken(userId: string) {
       device_type: getDeviceType(),
     };
 
-    await AIApi.post(
+    await aiApi.post(
       `/notifications/register-token?user_id=${encodeURIComponent(userId)}`,
       payload
     );

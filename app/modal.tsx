@@ -5,7 +5,7 @@ import { Alert, Linking, Platform, StyleSheet } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import AIApi from "./hooks/aiApi";
+import aiApi from "./hooks/aiApi";
 
 interface VersionInfo {
   service: string;
@@ -32,7 +32,7 @@ export default function ModalScreen() {
 
   const checkAppVersion = async () => {
     try {
-      const res = await AIApi.get("/health/version");
+      const res = await aiApi.get("/health/version");
       const data: VersionInfo = res.data;
 
       setVersionInfo(data);

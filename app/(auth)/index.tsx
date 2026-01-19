@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import AIApi from "../hooks/aiApi";
+import aiApi from "../hooks/aiApi";
 
 const { width } = Dimensions.get("window");
 
@@ -45,7 +45,7 @@ export default function WelcomeScreen() {
 
   const checkAppVersion = async () => {
     try {
-      const res = await AIApi.get("/health/version");
+      const res = await aiApi.get("/health/version");
       const data: VersionInfo = res.data;
 
       setVersionInfo(data);

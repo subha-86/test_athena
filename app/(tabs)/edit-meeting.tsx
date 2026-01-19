@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,12 +14,10 @@ import {
     Text,
     View,
 } from "react-native";
+import aiApi from "../hooks/aiApi";
 
 /* ================= CONSTANTS ================= */
 const BG_IMAGE = require("../../assets/images/bg.png");
-
-const EDIT_MEETING_API =
-  "https://sailwithcrm-athena.reportqube.com/api/calendar/edit-meeting";
 
 const PLAN_MODES = [
   { label: "Online", value: 1 },
@@ -93,20 +90,16 @@ export default function EditMeetingScreen() {
       const userId = await AsyncStorage.getItem("crmUserId");
       if (!userId) throw new Error("User ID missing");
 
-      await axios.put(
-        EDIT_MEETING_API,
-        {},
-        {
-          params: {
-            pre_plan_id: meeting.pre_plan_id,
-            user_id: userId,
-            date,
-            plan_mode: planMode,
-            from_time: fromTime,
-            to_time: toTime,
-          },
-        }
-      );
+      await aiApi.put("/calendar/edit-meeting", {}, {
+        params: {
+          pre_plan_id: meeting.pre_plan_id,
+          user_id: userId,
+          date,
+          plan_mode: planMode,
+          from_time: fromTime,
+          to_time: toTime,
+        },
+      });
 
       Alert.alert("Success", "Meeting updated successfully", [
         { text: "OK", onPress: () => router.back() },

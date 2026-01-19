@@ -1,30 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import axios from "axios";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ImageBackground,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
+import aiApi from "../hooks/aiApi";
 
 /* ================= BACKGROUND ================= */
 const BG_IMAGE = require("../../assets/images/bg.png");
-
-/* ================= API ================= */
-const BASE_API = "https://sailwithcrm-athena.reportqube.com/api";
-const ADD_MEETING_API = `${BASE_API}/calendar/add-meeting`;
-const CUSTOMERS_API = `${BASE_API}/crm_data/customers`;
 
 /* ================= PLAN MODES ================= */
 const PLAN_MODES = [
@@ -41,56 +36,100 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const formatDate = (d: Date) =>
   `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
 
-const formatTime = (d: Date) =>
-  `${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+/* ✅ FULL DATETIME (REQUIRED BY BACKEND) */
+const formatDateTime = (date: Date, time: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )} ${pad(time.getHours())}:${pad(time.getMinutes())}:00`;
+
+const parseDDMMYYYY = (s?: string) => {
+  if (!s) return null;
+  // Handle DD-MM-YYYY format
+  const parts = s.split("-");
+  if (parts.length === 3) {
+    const [dd, mm, yyyy] = parts.map(Number);
+    if (dd && mm && yyyy) {
+      const d = new Date(yyyy, mm - 1, dd);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+  // Try YYYY-MM-DD format
+  if (parts.length === 3) {
+    const [yyyy, mm, dd] = parts.map(Number);
+    if (dd && mm && yyyy) {
+      const d = new Date(yyyy, mm - 1, dd);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+  // Try parsing as ISO string
+  const isoDate = new Date(s);
+  if (!Number.isNaN(isoDate.getTime())) return isoDate;
+  return null;
+};
+
+const parseHHMMSS = (s?: string) => {
+  if (!s) return null;
+  const [hh, mm] = s.split(":").map(Number);
+  if (hh === undefined || mm === undefined) return null;
+  const d = new Date();
+  d.setHours(hh, mm, 0, 0);
+  return d;
+};
+
+const normalizePlanMode = (pm: any): number | null => {
+  const n = Number(pm);
+  return PLAN_MODES.some(p => p.value === n) ? n : null;
+};
 
 export default function AddPlanScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const didPrefill = useRef<string>("");
 
-  /* ================= CUSTOMER ================= */
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
-    []
-  );
+  /* ================= EDIT MODE ================= */
+  const prePlanId =
+    typeof params.pre_plan_id === "string" ? params.pre_plan_id : undefined;
+  const isEdit = !!prePlanId;
+
+  // Create a unique key for this navigation to detect when params change
+  const paramsKey = `${prePlanId || "new"}-${params.meeting ? "has-meeting" : "no-meeting"}`;
+
+  /* ================= STATE ================= */
+  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<
+    { id: string; name: string }[]
+  >([]);
+
   const [customerName, setCustomerName] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     null
   );
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
-  /* ================= FORM ================= */
   const [activity, setActivity] = useState("");
   const [planMode, setPlanMode] = useState<number | null>(null);
-  const [showPlanDropdown, setShowPlanDropdown] = useState(false);
 
   const [dateObj, setDateObj] = useState(new Date());
   const [fromTime, setFromTime] = useState(new Date());
-  const [toTime, setToTime] = useState(
-    new Date(Date.now() + 60 * 60 * 1000)
-  );
+  const [toTime, setToTime] = useState(new Date());
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
+  const [showPlanDropdown, setShowPlanDropdown] = useState(false);
 
   const [loading, setLoading] = useState(false);
 
-  const canSubmit =
-    customerName.trim() !== "" &&
-    activity.trim() !== "" &&
-    planMode !== null;
+  const canSubmit = planMode !== null;
 
   /* ================= LOAD CUSTOMERS ================= */
   useEffect(() => {
-    loadCustomers();
-  }, []);
+    (async () => {
+      const userId = await AsyncStorage.getItem("crmUserId");
+      if (!userId) return;
 
-  const loadCustomers = async () => {
-    try {
-      const crmUserId = await AsyncStorage.getItem("crmUserId");
-      if (!crmUserId) return;
-
-      const res = await axios.get(CUSTOMERS_API, {
-        params: { user_id: crmUserId.toUpperCase() },
+      const res = await aiApi.get("/crm_data/customers", {
+        params: { user_id: userId.toUpperCase() },
       });
 
       const list =
@@ -100,80 +139,200 @@ export default function AddPlanScreen() {
         })) || [];
 
       setCustomers(list);
-    } catch (err) {
-      console.log("Failed to load customers", err);
-    }
-  };
+      setFilteredCustomers(list);
+    })();
+  }, []);
 
-  /* ================= CREATE CUSTOMER IF NEW ================= */
-  const getOrCreateCustomer = async () => {
-    if (selectedCustomerId) {
-      return { customer_id: selectedCustomerId, customer_name: customerName };
+  /* ================= PREFILL ================= */
+  useEffect(() => {
+    // Only prefill if params have changed (new navigation)
+    if (didPrefill.current === paramsKey) return;
+    didPrefill.current = paramsKey;
+
+    // Parse meeting JSON if provided (from calendar edit button)
+    let meetingData: any = null;
+    if (typeof params.meeting === "string" && params.meeting) {
+      try {
+        meetingData = JSON.parse(params.meeting);
+        console.log("Parsed meeting data:", meetingData);
+      } catch (e) {
+        console.log("Failed to parse meeting JSON", e);
+      }
     }
 
-    const existing = customers.find(
-      (c) => c.name.toLowerCase() === customerName.toLowerCase()
+    // Prefer meeting data over individual params
+    if (meetingData) {
+      console.log("Prefilling from meeting data:", meetingData);
+      
+      // Customer
+      if (meetingData.customer) {
+        setCustomerName(String(meetingData.customer));
+      } else if (meetingData.customer_name) {
+        setCustomerName(String(meetingData.customer_name));
+      }
+      if (meetingData.customer_id) {
+        setSelectedCustomerId(String(meetingData.customer_id));
+      }
+
+      // Activity
+      if (meetingData.activity) {
+        setActivity(String(meetingData.activity));
+      }
+
+      // Date - try multiple formats
+      let dateSet = false;
+      if (meetingData.date) {
+        const d = parseDDMMYYYY(String(meetingData.date));
+        if (d) {
+          setDateObj(d);
+          dateSet = true;
+        }
+      }
+      if (!dateSet && params.date) {
+        const d = parseDDMMYYYY(params.date as string);
+        if (d) setDateObj(d);
+      }
+
+      // Times - handle both from_time/to_time and plan_time
+      // plan_time might be in format "HH:mm" or "HH:mm:ss" or full datetime
+      if (meetingData.from_time) {
+        const ft = parseHHMMSS(String(meetingData.from_time));
+        if (ft) setFromTime(ft);
+      } else if (meetingData.plan_time) {
+        // plan_time might be "10:00 AM" or "10:00:00" or "2026-01-15 10:00:00"
+        const planTimeStr = String(meetingData.plan_time);
+        // Try to extract just time part if it's a full datetime
+        const timePart = planTimeStr.includes(" ") 
+          ? planTimeStr.split(" ")[1] 
+          : planTimeStr;
+        const ft = parseHHMMSS(timePart);
+        if (ft) setFromTime(ft);
+      } else if (params.from_time) {
+        const ft = parseHHMMSS(params.from_time as string);
+        if (ft) setFromTime(ft);
+      }
+
+      if (meetingData.to_time) {
+        const tt = parseHHMMSS(String(meetingData.to_time));
+        if (tt) setToTime(tt);
+      } else if (meetingData.plan_time) {
+        // Use plan_time for to_time if to_time not available (add 1 hour as default)
+        const planTimeStr = String(meetingData.plan_time);
+        const timePart = planTimeStr.includes(" ") 
+          ? planTimeStr.split(" ")[1] 
+          : planTimeStr;
+        const ft = parseHHMMSS(timePart);
+        if (ft) {
+          const tt = new Date(ft);
+          tt.setHours(tt.getHours() + 1);
+          setToTime(tt);
+        }
+      } else if (params.to_time) {
+        const tt = parseHHMMSS(params.to_time as string);
+        if (tt) setToTime(tt);
+      }
+
+      // Plan Mode
+      if (meetingData.plan_mode !== undefined && meetingData.plan_mode !== null) {
+        setPlanMode(normalizePlanMode(meetingData.plan_mode));
+      } else if (params.plan_mode !== undefined) {
+        setPlanMode(normalizePlanMode(params.plan_mode));
+      }
+    } else {
+      // Fallback to individual params if no meeting JSON
+      if (params.customer_name) setCustomerName(String(params.customer_name));
+      if (params.customer_id) setSelectedCustomerId(String(params.customer_id));
+      if (params.activity) setActivity(String(params.activity));
+
+      const d = parseDDMMYYYY(params.date as string);
+      if (d) setDateObj(d);
+
+      const ft = parseHHMMSS(params.from_time as string);
+      if (ft) setFromTime(ft);
+
+      const tt = parseHHMMSS(params.to_time as string);
+      if (tt) setToTime(tt);
+
+      if (params.plan_mode !== undefined) {
+        setPlanMode(normalizePlanMode(params.plan_mode));
+      }
+    }
+  }, [params]);
+
+  /* ================= CUSTOMER SEARCH ================= */
+  const handleCustomerChange = (text: string) => {
+    setCustomerName(text);
+    if (isEdit) return;
+
+    const filtered = customers.filter(
+      c =>
+        c.name.toLowerCase().includes(text.toLowerCase()) ||
+        c.id.toLowerCase().includes(text.toLowerCase())
     );
 
-    if (existing) {
-      return { customer_id: existing.id, customer_name: existing.name };
-    }
-
-    const crmUserId = await AsyncStorage.getItem("crmUserId");
-
-    const res = await axios.post(CUSTOMERS_API, {
-      cust_name: customerName,
-      user_id: crmUserId?.toUpperCase(),
-    });
-
-    return {
-      customer_id: res.data?.data?.customer_id,
-      customer_name: customerName,
-    };
+    setFilteredCustomers(filtered);
+    setShowCustomerDropdown(true);
   };
 
   /* ================= SAVE ================= */
   const handleSave = async () => {
-    if (!canSubmit) {
-      Alert.alert("Missing info", "Please fill all required fields");
-      return;
-    }
+    if (!canSubmit) return;
 
     try {
       setLoading(true);
 
-      const userId = await AsyncStorage.getItem("crmUserId");
-      if (!userId) {
-        Alert.alert("Error", "User ID not found");
-        return;
+      const userId =
+        (typeof params.user_id === "string" && params.user_id) ||
+        (await AsyncStorage.getItem("crmUserId"));
+
+      if (!userId) throw new Error("User ID missing");
+
+      if (isEdit && prePlanId) {
+        /* 🔒 EDIT API - send all data */
+        await aiApi.put("/calendar/edit-meeting", null, {
+          params: {
+            pre_plan_id: prePlanId,
+            user_id: userId.toUpperCase(),
+            customer_id: selectedCustomerId || undefined,
+            customer_name: customerName || undefined,
+            activity: activity || undefined,
+            date: formatDate(dateObj),
+            plan_mode: planMode,
+            from_time: formatDateTime(dateObj, fromTime),
+            to_time: formatDateTime(dateObj, toTime),
+          },
+        });
+        Alert.alert("✅ Success", "Meeting updated");
+      } else {
+        /* ➕ ADD API */
+        await aiApi.post("/calendar/add-meeting", null, {
+          params: {
+            user_id: userId.toUpperCase(),
+            customer_id: selectedCustomerId,
+            activity,
+            date: formatDate(dateObj),
+            plan_mode: planMode,
+            from_time: formatDateTime(dateObj, fromTime),
+            to_time: formatDateTime(dateObj, toTime),
+          },
+        });
+        Alert.alert("✅ Success", "Meeting added");
+
+        // Clear all fields after successful add
+        setCustomerName("");
+        setSelectedCustomerId(null);
+        setActivity("");
+        setPlanMode(null);
+        setDateObj(new Date());
+        setFromTime(new Date());
+        setToTime(new Date());
+        setShowCustomerDropdown(false);
+        setShowPlanDropdown(false);
       }
 
-      const customer = await getOrCreateCustomer();
-
-      await axios.post(ADD_MEETING_API, null, {
-        params: {
-          user_id: userId.toUpperCase(),
-          customer_id: customer.customer_id,
-          customer_name: customer.customer_name,
-          activity: activity.trim(),
-          date: formatDate(dateObj),
-          plan_mode: planMode,
-          from_time: formatTime(fromTime),
-          to_time: formatTime(toTime),
-          ai_generated: false,
-        },
-      });
-
-      Alert.alert("✅ Success", "Meeting added to calendar");
       router.replace("/(tabs)/calendar");
-    } catch (err: any) {
-      console.log("ADD MEETING ERROR", err?.response?.data || err);
-      Alert.alert(
-        "Error",
-        err?.response?.data?.detail?.[0]?.msg ||
-          err?.message ||
-          "Failed to add meeting"
-      );
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Operation failed");
     } finally {
       setLoading(false);
     }
@@ -183,70 +342,51 @@ export default function AddPlanScreen() {
   return (
     <ImageBackground source={BG_IMAGE} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
-        {/* BACK */}
-        <View style={styles.topBar}>
-          <Pressable
-            style={styles.backCircle}
-            onPress={() => router.replace("/(tabs)/calendar")}
-          >
-            <Text style={styles.backArrow}>←</Text>
-          </Pressable>
-        </View>
-
         <KeyboardAvoidingView
-          style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
         >
           <ScrollView contentContainerStyle={styles.scroll}>
             <View style={styles.card}>
-              <Text style={styles.title}>Add Meeting</Text>
+              <Text style={styles.title}>
+                {isEdit ? "Edit Meeting" : "Add Meeting"}
+              </Text>
 
               {/* CUSTOMER */}
-              <Text style={styles.label}>Customer *</Text>
+              <Text style={styles.label}>Customer</Text>
               <TextInput
                 style={styles.input}
                 value={customerName}
-                placeholder="Type customer name or ID"
-                onFocus={() => setShowCustomerDropdown(true)}
-                onChangeText={(t) => {
-                  setCustomerName(t);
-                  setSelectedCustomerId(null);
-                  setShowCustomerDropdown(true);
-                }}
+                editable={!isEdit}
+                placeholder="Search customer"
+                onChangeText={handleCustomerChange}
+                onFocus={() => !isEdit && setShowCustomerDropdown(true)}
               />
 
-              {showCustomerDropdown &&
-                customers
-                  .filter((c) =>
-                    !customerName
-                      ? true
-                      : c.name
-                          .toLowerCase()
-                          .startsWith(customerName.toLowerCase()) ||
-                        c.id.startsWith(customerName)
-                  )
-                  .map((c) => (
-                    <Pressable
-                      key={c.id}
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setCustomerName(c.name);
-                        setSelectedCustomerId(c.id);
-                        setShowCustomerDropdown(false);
-                      }}
-                    >
-                      <Text style={styles.customerName}>{c.name}</Text>
-                      <Text style={styles.customerId}>ID: {c.id}</Text>
-                    </Pressable>
-                  ))}
+              {!isEdit &&
+                showCustomerDropdown &&
+                filteredCustomers.map(c => (
+                  <Pressable
+                    key={c.id}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setCustomerName(c.name);
+                      setSelectedCustomerId(c.id);
+                      setShowCustomerDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.customerName}>{c.name}</Text>
+                    <Text style={styles.customerId}>ID: {c.id}</Text>
+                  </Pressable>
+                ))}
 
               {/* ACTIVITY */}
-              <Text style={styles.label}>Activity *</Text>
+              <Text style={styles.label}>Activity</Text>
               <TextInput
                 style={styles.input}
                 value={activity}
+                editable={!isEdit}
                 onChangeText={setActivity}
-                placeholder="Meeting activity"
               />
 
               {/* DATE */}
@@ -257,6 +397,7 @@ export default function AddPlanScreen() {
               >
                 <Text>{formatDate(dateObj)}</Text>
               </Pressable>
+
               {showDatePicker && (
                 <DateTimePicker
                   value={dateObj}
@@ -268,40 +409,15 @@ export default function AddPlanScreen() {
                 />
               )}
 
-              {/* PLAN MODE */}
-              <Text style={styles.label}>Plan Mode *</Text>
-              <Pressable
-                style={styles.input}
-                onPress={() => setShowPlanDropdown(!showPlanDropdown)}
-              >
-                <Text>
-                  {PLAN_MODES.find((p) => p.value === planMode)?.label ??
-                    "Select plan mode"}
-                </Text>
-              </Pressable>
-
-              {showPlanDropdown &&
-                PLAN_MODES.map((m) => (
-                  <Pressable
-                    key={m.value}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setPlanMode(m.value);
-                      setShowPlanDropdown(false);
-                    }}
-                  >
-                    <Text>{m.label}</Text>
-                  </Pressable>
-                ))}
-
               {/* FROM TIME */}
               <Text style={styles.label}>From Time</Text>
               <Pressable
                 style={styles.input}
                 onPress={() => setShowFromPicker(true)}
               >
-                <Text>{formatTime(fromTime)}</Text>
+                <Text>{formatDateTime(dateObj, fromTime)}</Text>
               </Pressable>
+
               {showFromPicker && (
                 <DateTimePicker
                   value={fromTime}
@@ -319,8 +435,9 @@ export default function AddPlanScreen() {
                 style={styles.input}
                 onPress={() => setShowToPicker(true)}
               >
-                <Text>{formatTime(toTime)}</Text>
+                <Text>{formatDateTime(dateObj, toTime)}</Text>
               </Pressable>
+
               {showToPicker && (
                 <DateTimePicker
                   value={toTime}
@@ -332,19 +449,47 @@ export default function AddPlanScreen() {
                 />
               )}
 
+              {/* PLAN MODE */}
+              <Text style={styles.label}>Plan Mode *</Text>
+              <Pressable
+                style={styles.input}
+                onPress={() => setShowPlanDropdown(!showPlanDropdown)}
+              >
+                <Text>
+                  {PLAN_MODES.find(p => p.value === planMode)?.label ??
+                    "Select plan mode"}
+                </Text>
+              </Pressable>
+
+              {showPlanDropdown &&
+                PLAN_MODES.map(m => (
+                  <Pressable
+                    key={m.value}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setPlanMode(m.value);
+                      setShowPlanDropdown(false);
+                    }}
+                  >
+                    <Text>{m.label}</Text>
+                  </Pressable>
+                ))}
+
               {/* SAVE */}
               <Pressable
-                onPress={handleSave}
-                disabled={!canSubmit || loading}
                 style={[
                   styles.saveBtn,
                   (!canSubmit || loading) && { opacity: 0.6 },
                 ]}
+                disabled={!canSubmit || loading}
+                onPress={handleSave}
               >
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.saveText}>Add Meeting</Text>
+                  <Text style={styles.saveText}>
+                    {isEdit ? "Update Meeting" : "Add Meeting"}
+                  </Text>
                 )}
               </Pressable>
             </View>
@@ -358,25 +503,14 @@ export default function AddPlanScreen() {
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
   scroll: { padding: 20 },
-  topBar: { paddingHorizontal: 16, paddingTop: 8 },
-  backCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backArrow: { fontSize: 22, fontWeight: "900", color: "#fff" },
-  card: { backgroundColor: "#fff", borderRadius: 18, padding: 20, elevation: 5 },
+  card: { backgroundColor: "#fff", borderRadius: 18, padding: 20 },
   title: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#15314a",
     textAlign: "center",
     marginBottom: 20,
   },
-  label: { marginTop: 14, marginBottom: 6, color: "#555", fontSize: 13 },
+  label: { marginTop: 14, marginBottom: 6, color: "#555" },
   input: {
     height: 46,
     backgroundColor: "#f2f6ff",
@@ -392,8 +526,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 6,
   },
-  customerName: { fontSize: 14, fontWeight: "700", color: "#15314a" },
-  customerId: { fontSize: 12, color: "#666", marginTop: 2 },
+  customerName: { fontWeight: "700" },
+  customerId: { fontSize: 12, color: "#666" },
   saveBtn: {
     marginTop: 24,
     backgroundColor: "#0D47A1",
