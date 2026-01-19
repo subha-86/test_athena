@@ -1,42 +1,117 @@
-import { Ionicons } from "@expo/vector-icons";
+// app/(tabs)/_layout.tsx
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
       <Tabs
         screenOptions={{
           headerShown: false,
+          tabBarShowLabel: false,
+          // If you want the bottom bar visible, keep this. 
+          // If you only want the floating button, uncomment the line below:
+          // tabBarStyle: { display: "none" }, 
+        }}
+      >
+        {/* 1. DASHBOARD / HOME (Keep only this one) */}
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="home" size={28} color={color} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="a-track"
+          options={{
+            title: "A-Track",
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="radar" size={size} color={color} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="calendar"
+          options={{
+            title: "Calendar",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="call-outline" size={size} color={color} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="shipment-details"
+          options={{
+            title: "Shipment Details",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="cube-outline" size={size} color={color} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="customers"
+          options={{
+            title: "Customers Outstanding",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="people-outline" size={size} color={color} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="sea-tariff"
+          options={{
+            title: "Sea Tariff",
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="ship-wheel" size={size} color={color} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="TrackShipmentScreen"
+          options={{
+            title: "Track Shipment",
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="truck-fast-outline" size={size} color={color} />
+            ),
+          }}
+        />
+       //================hide screens  =================
+
+ <Tabs.Screen
+          name="add-plan-screen"
+          options={{
+            title: "plan",
+             href: null, // hides from tab bar
           tabBarStyle: { display: "none" },
-        }}
+          }}
+        />
 
+        <Tabs.Screen
+          name="meeting-entry"
+          options={{
+            title: "",
+             href: null, // hides from tab bar
+          tabBarStyle: { display: "none" },
+          }}
+        />
+       
+      </Tabs>
 
-
-      >
-
-      <Tabs.Screen
-        name="shipment-details"
-        options={{
-          title: 'Shipment-Details',
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" color={color} size={size} />
-          ),
-        }}
-      />
-    </Tabs>
-
-      {/* FLOATING HOME BUTTON */}
-      <TouchableOpacity
-        style={styles.homeFab}
-        onPress={() => router.replace("/(tabs)")}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="home" size={40} color="#FFFFFF" />
-      </TouchableOpacity>
+    
     </View>
   );
 }
@@ -45,27 +120,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-
   homeFab: {
     position: "absolute",
-    bottom: 22,
     left: 18,
-
     width: 65,
     height: 65,
-    borderRadius: 50,
-
+    borderRadius: 32.5,
     backgroundColor: "#4375eaff",
     justifyContent: "center",
     alignItems: "center",
-
-    // iOS shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
-
-    // Android
     elevation: 20,
+    zIndex: 100, // Makes sure button stays above the tab content
   },
 });

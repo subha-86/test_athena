@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -7,11 +7,10 @@ import {
   Dimensions,
   ImageBackground,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 /* ===== BACKGROUND ===== */
@@ -19,7 +18,6 @@ const bgImage = require("../../assets/images/bg.png");
 const { width } = Dimensions.get("window");
 
 /* ===== GRID CARD SIZE ===== */
-const CARD_SIZE = (width - 16 * 2 - 14) / 2;
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -104,52 +102,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ================= DASHBOARD GRID ================= */}
-        <ScrollView contentContainerStyle={styles.container}>
-          <View style={styles.grid}>
-            <SquareButton
-              icon={<MaterialCommunityIcons name="radar" size={28} color="#16A34A" />}
-              label="A-Track"
-              onPress={() => router.push("/(tabs)/a-track")}
-            />
-
-            <SquareButton
-              icon={<Ionicons name="call-outline" size={28} color="#7C3AED" />}
-              label="Calendar"
-              onPress={() => router.push("/(tabs)/calendar")}
-            />
-
-            <SquareButton
-              icon={<Ionicons name="cube-outline" size={28} color="#F97316" />}
-              label="Shipment Details"
-              onPress={() => router.push("/(tabs)/shipment-details")}
-            />
-
-            <SquareButton
-              icon={<Ionicons name="people-outline" size={28} color="#DB2777" />}
-              label="Customers Outstanding"
-              onPress={() => router.push("/(tabs)/customers")}
-            />
-
-            <SquareButton
-              icon={<MaterialCommunityIcons name="ship-wheel" size={28} color="#0284C7" />}
-              label="Sea Tariff"
-              onPress={() => router.push("/(tabs)/sea-tariff")}
-            />
-            <SquareButton
-  icon={
-    <MaterialCommunityIcons
-      name="truck-fast-outline"
-      size={28}
-      color="#0EA5E9"
-    />
-  }
-  label="Track Shipment"
-  onPress={() => router.push("/(tabs)/TrackShipmentScreen")}
-/>
-
-          </View>
-        </ScrollView>
       </ImageBackground>
     </SafeAreaView>
   );
@@ -259,20 +211,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  card: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    marginBottom: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
 
   iconCircle: {
     width: 54,
