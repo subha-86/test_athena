@@ -12,7 +12,22 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarStyle: { display: "none" },
         }}
+
+
+
+      >
+
+      <Tabs.Screen
+        name="shipment-details"
+        options={{
+          title: 'Shipment-Details',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" color={color} size={size} />
+          ),
+        }}
       />
+    </Tabs>
 
       {/* FLOATING HOME BUTTON */}
       <TouchableOpacity

@@ -1,304 +1,330 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   ImageBackground,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import aiApi from "../hooks/aiApi";
+import erpApi from "../hooks/erpApi";
 
 /* ===== BACKGROUND ===== */
 const bgImage = require("../../assets/images/bg.png");
 
-type Customer = {
-  cust_name: string;
-  customer_id: string;
-  lead: boolean;
-  interaction_count: number;
+type OutstandingSale = {
+  id: string;
+  text: string;
+  vesselCode: string | null;
+  mloName: string | null;
+  customername: string | null;
+  salesperson: string | null;
+  balancetc: number | null;
+  balanceamount: number | null;
+  days45to60: number | null;
+  days45: number | null;
+  days30: number | null;
 };
 
-export default function CustomersScreen() {
+export default function OutstandingViaSales() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [list, setList] = useState<OutstandingSale[]>([]);
 
   useEffect(() => {
-    fetchCustomers();
+    fetchOutstandingList();
   }, []);
 
-  const fetchCustomers = async () => {
+  const fetchOutstandingList = async () => {
     try {
       setLoading(true);
-
-      const crmUserId = await AsyncStorage.getItem("crmUserId");
-      if (!crmUserId) {
-        router.replace("/(auth)/login");
-        return;
-      }
-
-      const response = await aiApi.get("/crm_data/customer-outstandings", {
-        params: { user_id: crmUserId },
-      });
-
-      setCustomers(response.data?.customers_interacted ?? []);
+      const response = await erpApi.get(
+        "/Athena/feeder/mobileApp/outstandingviasales",
+        { params: { salesid: "E0044" } }
+      );
+      setList(response.data?.outstandingList || []);
     } catch (e) {
-      console.log("CUSTOMER FETCH ERROR:", e);
-      setCustomers([]);
+      console.log("OUTSTANDING FETCH ERROR:", e);
+      setList([]);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safe}>
-      <ImageBackground source={bgImage} style={styles.bg}>
-        <View style={styles.overlay} />
+  const renderItem = ({ item }: { item: OutstandingSale }) => (
+    <View style={styles.card}>
+      {/* HEADER SECTION */}
+      <View style={styles.cardHeader}>
+        <View style={styles.iconCircle}>
+          <Ionicons name="business" size={18} color="#2563EB" />
+        </View>
+        <Text style={styles.customerName} numberOfLines={1}>
+          {item.customername || "No Customer Name"}
+        </Text>
+      </View>
 
-        {/* BACK BUTTON */}
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
+      <View style={styles.divider} />
 
-        {/* ===== FIXED HEADER ===== */}
-        <View style={styles.fixedHeader}>
-          <View style={styles.headerAccent} />
-          <Text style={styles.headerTitle}>Customers</Text>
-          <Text style={styles.headerSubtitle}>
-            {customers.length} total customers
+      {/* PRIMARY INFO GRID */}
+      <View style={styles.grid}>
+        <View style={styles.gridItem}>
+          <Text style={styles.label}>Sales Person</Text>
+          <Text style={styles.value}>{item.salesperson || "-"}</Text>
+        </View>
+
+        <View style={styles.gridItem}>
+          <Text style={styles.label}>Balance TC</Text>
+          <Text style={styles.value}>{item.balancetc ?? "0.00"}</Text>
+        </View>
+      </View>
+
+      {/* TOTAL BALANCE HIGHLIGHT */}
+      <View style={styles.highlightSection}>
+        <Text style={styles.label}>Total Balance Amount</Text>
+        <View style={styles.amountBadgePrimary}>
+          <Text style={styles.amountTextPrimary}>
+            ${item.balanceamount?.toLocaleString() ?? "0.00"}
+          </Text>
+        </View>
+      </View>
+
+      {/* AGING BUCKETS GRID (3 COLUMNS) */}
+      <View style={styles.agingGrid}>
+        <View style={styles.agingItem}>
+          <Text style={styles.labelSmall}>Day 30</Text>
+          <Text style={styles.agingValue}>
+            ${item.days30?.toLocaleString() ?? "0"}
           </Text>
         </View>
 
-        {/* ===== SCROLLABLE CONTAINER ===== */}
-        <View style={styles.scrollContainer}>
-          {loading && (
-            <ActivityIndicator
-              size="large"
-              color="#2563EB"
-              style={{ marginTop: 40 }}
-            />
-          )}
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContainer}
-          >
-            {!loading &&
-              customers.map((item, index) => (
-                <View
-                  key={`${item.customer_id}-${index}`}
-                  style={styles.card}
-                >
-                  {/* NAME + LEAD */}
-                  <View style={styles.cardTop}>
-                    <Text style={styles.customerName}>
-                      {item.cust_name}
-                    </Text>
-
-                    {item.lead && (
-                      <View style={styles.leadBadge}>
-                        <Ionicons name="star" size={12} color="#92400E" />
-                        <Text style={styles.leadText}>LEAD</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  {/* DETAILS */}
-                  <View style={styles.cardBottom}>
-                    <View>
-                      <Text style={styles.label}>Customer ID</Text>
-                      <Text style={styles.value}>
-                        {item.customer_id}
-                      </Text>
-                    </View>
-
-                    <View style={styles.interactionPill}>
-                      <Ionicons
-                        name="chatbubble-ellipses-outline"
-                        size={14}
-                        color="#2563EB"
-                      />
-                      <Text style={styles.interactionText}>
-                        {item.interaction_count}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
-
-            {!loading && customers.length === 0 && (
-              <Text style={styles.emptyText}>
-                No customers found
-              </Text>
-            )}
-          </ScrollView>
+        <View style={[styles.agingItem, styles.borderX]}>
+          <Text style={styles.labelSmall}>Day 65</Text>
+          <Text style={styles.agingValue}>
+            ${item.days45?.toLocaleString() ?? "0"}
+          </Text>
         </View>
+
+        <View style={styles.agingItem}>
+          <Text style={styles.labelSmall}>45-65 Days</Text>
+          <Text style={styles.agingValue}>
+            ${item.days45to60?.toLocaleString() ?? "0"}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <ImageBackground source={bgImage} style={styles.bg} resizeMode="cover">
+        <View style={styles.overlay} />
+
+        <SafeAreaView style={styles.safe}>
+          {/* NAVIGATION BAR */}
+          <View style={styles.navBar}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Ionicons name="chevron-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>Outstanding Sales</Text>
+              <Text style={styles.headerSubtitle}>{list.length} records found</Text>
+            </View>
+          </View>
+
+          {/* LIST AREA */}
+          <View style={styles.contentArea}>
+            {loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator size="large" color="#ffffff" />
+                <Text style={styles.loadingText}>Fetching Records...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={list}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                renderItem={renderItem}
+                contentContainerStyle={styles.listContainer}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <View style={styles.center}>
+                    <Ionicons name="document-text-outline" size={48} color="rgba(255,255,255,0.4)" />
+                    <Text style={styles.emptyText}>No outstanding sales found</Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        </SafeAreaView>
       </ImageBackground>
-    </SafeAreaView>
+    </View>
   );
 }
 
-/* ===== STYLES ===== */
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#090808" },
+  container: { flex: 1 },
+  safe: { flex: 1 },
   bg: { flex: 1 },
-
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(10, 2, 2, 0.55)",
+    backgroundColor: "rgba(10, 11, 30, 0.75)",
   },
-
-  backBtn: {
-    position: "absolute",
-    top: 10,
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.6)",
+  center: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 20,
+    marginTop: 50,
   },
 
-  /* ===== FIXED HEADER ===== */
-  fixedHeader: {
-    paddingTop: 50,
-    paddingBottom: 10,
+  /* HEADER */
+  navBar: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
-    backgroundColor: "rgba(5, 4, 47, 0.4)",
-    zIndex: 5,
+    paddingVertical: 15,
   },
-
-  headerAccent: {
-    width: 36,
-    height: 1,
-    borderRadius: 4,
-    backgroundColor: "transparent",
-    marginBottom: 10,
+  backBtn: {
+    width: 45,
+    height: 45,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
   },
-
+  headerTextContainer: { flex: 1 },
   headerTitle: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: "800",
     color: "#ffffff",
+    letterSpacing: 0.5,
   },
-
   headerSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: "#eff2f5",
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "500",
   },
 
-  /* ===== SCROLL AREA ===== */
-  scrollContainer: {
-    flex: 1,
-    backgroundColor: "#F1F5F9",
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    overflow: "hidden",
-  },
-
+  /* LIST AREA */
+  contentArea: { flex: 1 },
   listContainer: {
     padding: 16,
-    paddingBottom: 30,
+    paddingBottom: 40,
   },
 
-  /* ===== CUSTOMER CARD ===== */
+  /* CARD DESIGN */
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-
-  cardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  customerName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0F172A",
-    flex: 1,
-    paddingRight: 8,
-  },
-
-  leadBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
     borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
   },
-
-  leadText: {
-    marginLeft: 4,
-    fontSize: 11,
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(37, 99, 235, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  customerName: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#92400E",
+    color: "#1E293B",
   },
-
   divider: {
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: "#F1F5F9",
     marginVertical: 12,
   },
-
-  cardBottom: {
+  grid: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    marginBottom: 12,
   },
-
+  gridItem: { width: "48%" },
   label: {
-    fontSize: 11,
-    color: "#64748B",
-  },
-
-  value: {
-    fontSize: 13,
+    fontSize: 10,
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
     fontWeight: "600",
-    color: "#0F172A",
-    marginTop: 2,
+    marginBottom: 2,
   },
-
-  interactionPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E0F2FE",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  interactionText: {
-    marginLeft: 6,
-    fontWeight: "700",
-    color: "#2563EB",
-    fontSize: 13,
-  },
-
-  emptyText: {
-    marginTop: 40,
-    textAlign: "center",
-    color: "#64748B",
+  value: {
     fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+  },
+
+  /* HIGHLIGHTS */
+  highlightSection: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  amountBadgePrimary: {
+    marginTop: 4,
+  },
+  amountTextPrimary: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#16A34A",
+  },
+
+  /* AGING GRID (Compact 3-column) */
+  agingGrid: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    paddingTop: 12,
+  },
+  agingItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  borderX: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  labelSmall: {
+    fontSize: 9,
+    color: "#64748B",
+    textTransform: "uppercase",
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  agingValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#475569",
+  },
+
+  /* STATES */
+  loadingText: {
+    marginTop: 12,
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  emptyText: {
+    marginTop: 10,
+    color: "rgba(255, 255, 255, 0.5)",
+    fontSize: 15,
   },
 });
