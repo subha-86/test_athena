@@ -225,6 +225,7 @@ export default function LoginScreen() {
         await registerNotificationToken(user.userId);
 
         await handleEmailAiFlow(user.userId, router);
+        //router.replace("/post-login");
       } else {
         Alert.alert("Login Failed", result?.message || "Invalid credentials");
       }
